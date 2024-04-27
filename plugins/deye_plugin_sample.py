@@ -18,7 +18,6 @@
 from deye_plugin_loader import DeyePluginContext
 from deye_events import DeyeEventProcessor, DeyeEventList, DeyeObservationEvent
 
-
 class DeyeSamplePublisher(DeyeEventProcessor):
     """An example of custom DeyeEventProcessor implementation
     """
@@ -32,8 +31,9 @@ class DeyeSamplePublisher(DeyeEventProcessor):
                 observation_event: DeyeObservationEvent = event
                 print(
                     {
-                        "name": observation_event.observation.sensor.mqtt_topic_suffix,
-                        "value": observation_event.observation.value,
+                        'name': observation_event.observation.sensor.name,
+                        'unit': observation_event.observation.sensor.unit,
+                        'value': observation_event.observation.value,
                     }
                 )
 
