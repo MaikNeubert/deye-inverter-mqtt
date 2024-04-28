@@ -20,71 +20,21 @@ from typing import List
 from deye_config import DeyeConfig, DeyeEnv
 from deye_plugin_loader import DeyePluginContext
 from deye_events import DeyeEventList, DeyeEventProcessor, DeyeObservationEvent
-from influxdb import InfluxDBClient
+from influxdb_client import InfluxDBClient, Point
+from influxdb_client .client.write_api import SYNCHRONOUS
 
 class DeyeInfluxDBConfig:
     def __init__(
         self,
-        host='localhost',
-        port=8086,
-        username='root',
-        password='root',
         database=None,
-        ssl=False,
-        verify_ssl=False,
-        timeout=None,
-        retries=3,
-        use_udp=False,
-        udp_port=4444,
-        proxies=None,
-        pool_size=10,
-        path='',
-        cert=None,
-        gzip=False,
-        session=None,
-        headers=None,
-        socket_options=None,
     ):
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
         self.database = database
-        self.ssl = ssl
-        self.verify_ssl = verify_ssl
-        self.timeout = timeout
-        self.retries = retries
-        self.use_udp = use_udp
-        self.udp_port = udp_port
-        self.proxies = proxies
-        self.pool_size = pool_size
-        self.path = path
-        self.cert = cert
-        self.gzip = gzip
-        self.session = session
-        self.headers = headers
-        self.socket_options = socket_options
 
     @staticmethod
     def from_env():
-
-            
         try:
             return DeyeInfluxDBConfig(
-                host=DeyeEnv.string("INFLUX_HOST", 'localhost'),
-                port=DeyeEnv.integer("INFLUX_PORT", 8086),
-                username=DeyeEnv.string("INFLUX_USERNAME", 'root'),
-                password=DeyeEnv.string("INFLUX_PASSWORD", 'root'),
                 database=DeyeEnv.string("INFLUX_DATABASE", 'default'),
-                ssl=DeyeEnv.boolean("INFLUX_SSL", False),
-                verify_ssl=DeyeEnv.boolean("INFLUX_VERIFY_SSL", False),
-                timeout=DeyeEnv.integer("INFLUX_TIMEOUT", 10000),
-                retries=DeyeEnv.integer("INFLUX_RETRIES", 3),
-                use_udp=DeyeEnv.string("INFLUX_USE_UDP", False),
-                udp_port=DeyeEnv.integer("INFLUX_UDP_PORT", 4444),
-                pool_size=DeyeEnv.integer("INFLUX_POOL_SIZE", 10),
-                path=DeyeEnv.string("INFLUX_PATH", ''),
-                gzip=DeyeEnv.boolean("INFLUX_GZIP", False),
             )
         except Exception as e:
             print(e)
@@ -96,27 +46,7 @@ class DeyeInfluxDBPublisher(DeyeEventProcessor):
     def __init__(self, config: DeyeConfig):
         self.__config = config
         self.influx_config = DeyeInfluxDBConfig.from_env()
-        self.influx_client = InfluxDBClient(
-            host=self.influx_config.host,
-            port=self.influx_config.port,
-            username=self.influx_config.username,
-            password=self.influx_config.password,
-            database=self.influx_config.database,
-            ssl=self.influx_config.ssl,
-            verify_ssl=self.influx_config.verify_ssl,
-            timeout=self.influx_config.timeout,
-            retries=self.influx_config.retries,
-            use_udp=self.influx_config.use_udp,
-            udp_port=self.influx_config.udp_port,
-            proxies=self.influx_config.proxies,
-            pool_size=self.influx_config.pool_size,
-            path=self.influx_config.path,
-            cert=self.influx_config.cert,
-            gzip=self.influx_config.gzip,
-            session=self.influx_config.session,
-            headers=self.influx_config.headers,
-            socket_options=self.influx_config.socket_options,
-        )
+        self.influx_client = InfluxDBClient.from_env_properties()
 
     """An example of custom DeyeEventProcessor implementation
     """
@@ -126,25 +56,17 @@ class DeyeInfluxDBPublisher(DeyeEventProcessor):
     def process(self, events: DeyeEventList):
         print(f"Processing events from logger: {events.logger_index}")
 
-        fields = {}
+        point = Point("deye_wr")
         for event in events:
             if isinstance(event, DeyeObservationEvent):
                 observation_event: DeyeObservationEvent = event
-
-                field_name = observation_event.observation.sensor.name.replace(' ', '_')
-                fields[field_name] = observation_event.observation.value
-
-        point = {
-            "measurement": "logger",
-            "time": int(observation_event.observation.timestamp.timestamp()),
-            "fields": fields
-        }
+                field = observation_event.observation.sensor.name.replace(' ', '_')
+                point.field(field, observation_event.observation.value)
         
-        print(point)
-        self.influx_client.write_points(
-            [point]
-        )
-        
+        write_api = self.influx_client.write_api(write_options=SYNCHRONOUS)
+        write_api.write(bucket=self.influx_config.database, record=point)
+
+       
 
 class DeyePlugin:
     """Plugin entrypoint
